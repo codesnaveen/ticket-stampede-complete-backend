@@ -1,0 +1,62 @@
+import os
+import time
+import psycopg
+from psycopg.rows import dict_row
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/tickets",
+)
+
+def connect():
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
+def wait_for_db(timeout=60):
+    deadline=time.time()+timeout
+    last=None
+    while time.time()<deadline:
+        try:
+            with connect() as conn:
+                conn.execute("SELECT 1")
+            return
+        except Exception as exc:
+            last=exc
+            time.sleep(1)
+    raise RuntimeError(f"database not ready: {last}")
+
+def init_db():
+    with connect() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS sale_state (
+            id INTEGER PRIMARY KEY CHECK (id=1),
+            total_tickets INTEGER NOT NULL CHECK (total_tickets >= 0),
+            sold_count INTEGER NOT NULL DEFAULT 0 CHECK (sold_count >= 0),
+            sale_version BIGINT NOT NULL DEFAULT 1,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE TABLE IF NOT EXISTS tickets (
+            ticket_number INTEGER PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            request_id TEXT NOT NULL UNIQUE,
+            sale_version BIGINT NOT NULL,
+            issued_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE TABLE IF NOT EXISTS idempotency_keys (
+            request_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            ticket_number INTEGER NOT NULL,
+            sale_version BIGINT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE INDEX IF NOT EXISTS tickets_user_idx ON tickets(user_id);
+        CREATE INDEX IF NOT EXISTS tickets_version_idx ON tickets(sale_version);
+        """)
+        row=conn.execute("SELECT id FROM sale_state WHERE id=1").fetchone()
+        if not row:
+            conn.execute(
+                "INSERT INTO sale_state(id,total_tickets,sold_count,sale_version) VALUES(1,100,0,1)"
+            )
+        conn.commit()
