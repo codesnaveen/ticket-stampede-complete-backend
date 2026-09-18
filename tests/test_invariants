@@ -1,0 +1,40 @@
+import os, uuid, pytest, psycopg
+from fastapi.testclient import TestClient
+os.environ["DATABASE_URL"]=os.getenv("TEST_DATABASE_URL","postgresql://postgres:postgres@localhost:5432/tickets_test")
+from app.main import app
+
+@pytest.fixture(autouse=True)
+def reset():
+    with psycopg.connect(os.environ["DATABASE_URL"]) as c:
+        c.execute("DROP TABLE IF EXISTS idempotency_keys,tickets,sale_state CASCADE")
+        c.commit()
+    from app.db import init_db
+    init_db()
+
+def test_idempotency():
+    with TestClient(app) as c:
+        c.post("/reset",json={"ticket_count":1})
+        rid=str(uuid.uuid4())
+        a=c.post("/buy",json={"user_id":"alice","request_id":rid})
+        b=c.post("/buy",json={"user_id":"alice","request_id":rid})
+        assert a.status_code==200 and b.status_code==200
+        assert a.json()["ticket_number"]==b.json()["ticket_number"]
+        assert c.get("/status").json()["sold_count"]==1
+
+def test_conflicting_replay_is_rejected():
+    with TestClient(app) as c:
+        c.post("/reset",json={"ticket_count":1})
+        rid=str(uuid.uuid4())
+        assert c.post("/buy",json={"user_id":"alice","request_id":rid}).status_code==200
+        assert c.post("/buy",json={"user_id":"bob","request_id":rid}).status_code==409
+
+def test_sold_out():
+    with TestClient(app) as c:
+        c.post("/reset",json={"ticket_count":2})
+        for user in ["a","b","c"]:
+            r=c.post("/buy",json={"user_id":user,"request_id":str(uuid.uuid4())})
+            if user=="c": assert r.status_code==409
+        st=c.get("/status").json()
+        assert st["sold_count"]==2
+        assert len(st["tickets"])==2
+        assert len({x["ticket_number"] for x in st["tickets"]})==2
