@@ -1,0 +1,3 @@
+docker compose up -d --build
+python -m pip install -r requirements.txt
+python loadtest/probe_naive.py --base-url http://localhost:8001 --requests 1000
