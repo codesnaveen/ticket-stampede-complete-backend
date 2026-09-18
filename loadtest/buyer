@@ -1,0 +1,75 @@
+import argparse, asyncio, math, statistics, time, uuid
+import httpx
+
+def percentile(values,p):
+    if not values: return None
+    xs=sorted(values)
+    k=(len(xs)-1)*p
+    f=math.floor(k); c=math.ceil(k)
+    return xs[f] if f==c else xs[f]*(c-k)+xs[c]*(k-f)
+
+async def request(client, url, user, rid, sem, latencies, results):
+    async with sem:
+        t=time.perf_counter()
+        try:
+            r=await client.post(url+"/buy",json={"user_id":user,"request_id":rid})
+            latencies.append((time.perf_counter()-t)*1000)
+            results.append((r.status_code,r.json()))
+        except Exception as e:
+            latencies.append((time.perf_counter()-t)*1000)
+            results.append(("error",str(e)))
+
+async def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--base-url",default="http://localhost")
+    ap.add_argument("--requests",type=int,default=50000)
+    ap.add_argument("--concurrency",type=int,default=1000)
+    ap.add_argument("--duplicates",type=int,default=1000,
+                    help="number of duplicate request IDs to replay; each is sent twice")
+    ap.add_argument("--tickets",type=int,default=100)
+    ap.add_argument("--timeout",type=float,default=30)
+    args=ap.parse_args()
+
+    async with httpx.AsyncClient(timeout=args.timeout) as client:
+        await client.post(args.base_url+"/reset",json={"ticket_count":args.tickets})
+        ids=[str(uuid.uuid4()) for _ in range(args.requests)]
+        # Force duplicate IDs: pair the first N IDs with a second occurrence.
+        dup=min(args.duplicates,args.requests//2)
+        ids += ids[:dup]
+        users=[f"user-{i}" for i in range(len(ids))]
+        sem=asyncio.Semaphore(args.concurrency)
+        latencies=[]; results=[]
+        start=time.perf_counter()
+        await asyncio.gather(*[
+            request(client,args.base_url,users[i],ids[i],sem,latencies,results)
+            for i in range(len(ids))
+        ])
+        elapsed=time.perf_counter()-start
+        status=(await client.get(args.base_url+"/status")).json()
+
+    issued=status["tickets"]
+    nums=[x["ticket_number"] for x in issued]
+    reqs=[x["request_id"] for x in issued]
+    counts={}
+    for x in issued: counts[x["request_id"]]=counts.get(x["request_id"],0)+1
+    invariants={
+      "never_oversold": status["sold_count"] <= status["total_tickets"] == args.tickets,
+      "unique_ticket_numbers": len(nums)==len(set(nums)),
+      "request_id_once": all(v==1 for v in counts.values()),
+      "status_matches_issued": status["sold_count"]==len(issued),
+    }
+    ok=sum(1 for s,_ in results if s==200)
+    soldout=sum(1 for s,_ in results if s==409)
+    errors=sum(1 for s,_ in results if s=="error" or s>=500)
+    print("\n=== BUYER REPORT ===")
+    print(f"requests_sent={len(ids)} successful={ok} sold_out_or_conflict={soldout} errors={errors}")
+    print(f"elapsed_s={elapsed:.3f} rps={len(ids)/elapsed:.2f}")
+    print(f"p50_ms={percentile(latencies,.50):.3f} p99_ms={percentile(latencies,.99):.3f}")
+    print(f"tickets_reported={status['sold_count']} rows={len(issued)}")
+    for k,v in invariants.items(): print(f"{k}: {'PASS' if v else 'FAIL'}")
+    overall=all(invariants.values())
+    print(f"OVERALL: {'PASS' if overall else 'FAIL'}")
+    return 0 if overall else 1
+
+if __name__=="__main__":
+    raise SystemExit(asyncio.run(main()))
