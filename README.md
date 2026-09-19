@@ -560,44 +560,7 @@ This is one reason idempotency is treated as persisted state rather than an in-m
 
 ---
 
-# 17. Performance experiments
-
-Correctness comes first.
-
-Once the invariants pass, the buyer can be used to investigate performance.
-
-I test increasing concurrency and record:
-
-| Concurrency | Requests/sec | Median | P99 | Errors |
-| ----------: | -----------: | -----: | --: | -----: |
-|          10 |              |        |     |        |
-|          50 |              |        |     |        |
-|         100 |              |        |     |        |
-|         250 |              |        |     |        |
-|         500 |              |        |     |        |
-|        1000 |              |        |     |        |
-
-The purpose is not simply to find the largest RPS number.
-
-I want to determine **where the bottleneck actually occurs**.
-
-Possible bottlenecks include:
-
-* buyer CPU/network
-* seller CPU
-* database contention
-* database connections
-* lock wait
-* Nginx
-* network latency
-
-The measured results and interpretation are stored in:
-
-**[`experiments/RESULTS.md`](experiments/RESULTS.md)**
-
----
-
-# 18. Slow database experiment
+# 17. Slow database experiment
 
 The system also includes a slow-database experiment.
 
@@ -627,7 +590,7 @@ The actual experiment result is recorded in:
 
 ---
 
-# 19. Database restart experiment
+# 18. Database restart experiment
 
 The database can also be stopped during an active sale and restarted.
 
@@ -647,7 +610,7 @@ The current system still has PostgreSQL as a dependency.
 
 ---
 
-# 20. Testing
+# 19. Testing
 
 Automated tests cover core seller behaviour including:
 
@@ -682,7 +645,7 @@ The load client provides the higher-concurrency system-level verification.
 
 ---
 
-# 21. Repository structure
+# 20. Repository structure
 
 ```text
 dyla-ticket-stampede/
@@ -726,7 +689,7 @@ dyla-ticket-stampede/
 
 ---
 
-# 22. AI-assisted development
+# 21. AI-assisted development
 
 AI coding tools were used during development.
 
@@ -751,7 +714,7 @@ The goal is to make the development process auditable rather than presenting AI-
 
 ---
 
-# 23. Engineering decisions
+# 22. Engineering decisions
 
 The detailed reasoning is in:
 
@@ -774,7 +737,7 @@ The most important design choice is that the system's correctness does not depen
 
 ---
 
-# 24. Known limitations
+# 23. Known limitations
 
 This is intentionally not presented as a production-ready global ticketing platform.
 
@@ -808,7 +771,7 @@ I do not claim to have solved database high availability when the submission has
 
 ---
 
-# 25. What I would investigate next
+# 24. What I would investigate next
 
 With another two weeks, I would focus on depth rather than adding unrelated features.
 
@@ -853,7 +816,7 @@ The goal would be to prove where throughput is limited rather than assuming the 
 
 ---
 
-# 26. Submission evidence
+# 25. Submission evidence
 
 The repository is intended to contain the following evidence:
 
@@ -887,7 +850,7 @@ No benchmark numbers or AI transcripts are fabricated.
 
 ---
 
-# 27. Final clean-checkout checklist
+# 26. Final clean-checkout checklist
 
 Before submission:
 
@@ -927,7 +890,7 @@ Before submission:
 
 ---
 
-# 28. Submission
+# 27. Submission
 
 The repository should be private and shared with the DYLA/Thuli team as instructed in the challenge.
 
